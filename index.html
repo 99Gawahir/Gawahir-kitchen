@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Baker's Table | Recipe Gallery</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #fdfaf6; --card-bg: #ffffff; --primary: #8d5524;
+            --secondary: #606c38; --text-main: #2d2d2d; --shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        body { font-family: 'Cairo', system-ui, sans-serif; background: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
+        header { text-align: center; padding: 40px 0 20px; }
+
+        /* Lets each piece of text render in its own natural direction
+           (Arabic right-to-left, English left-to-right) regardless of
+           what language the rest of the page is in. */
+        .bidi-auto { unicode-bidi: plain-text; }
+
+        .search-container { max-width: 600px; margin: 0 auto 40px; position: relative; }
+        #search-input {
+            width: 100%; padding: 15px 20px; border-radius: 30px; border: 2px solid #ddd;
+            font-size: 1rem; outline: none; transition: border-color 0.3s;
+            box-shadow: var(--shadow); box-sizing: border-box;
+        }
+        #search-input:focus { border-color: var(--secondary); }
+
+        .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; }
+        .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+        .card img { width: 100%; height: 200px; object-fit: cover; background: #f0f0f0; }
+        .card-body { padding: 20px; flex-grow: 1; }
+        .card-actions { padding: 15px; display: flex; gap: 8px; border-top: 1px solid #eee; }
+        .admin-actions { padding: 0 15px 15px; display: flex; gap: 8px; }
+
+        .btn { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.8rem; text-align: center; text-decoration: none; color: inherit; }
+        .btn-p { background: var(--secondary); color: white; }
+        .btn-s { background: #eee; color: #333; }
+        .btn-danger { background: #f4d6d6; color: #a33; }
+
+        #admin-section { background: #fff; padding: 25px; border-radius: 12px; margin: 0 auto 40px; border: 2px solid var(--primary); display: none; max-width: 600px; }
+        #admin-header { display: flex; justify-content: space-between; align-items: center; }
+        input, textarea { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; display: block; box-sizing: border-box; }
+        #login-trigger { position: fixed; bottom: 10px; right: 10px; opacity: 0.3; cursor: pointer; font-size: 0.7rem; }
+        #status-msg { text-align: center; grid-column: 1/-1; color: #888; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>The Baker's Table</h1>
+    <p>Search through my favorite recipes</p>
+</header>
+
+<div class="search-container">
+    <input type="text" id="search-input" dir="auto" class="bidi-auto" placeholder="🔍 Search for a recipe title (e.g. 'Sourdough')..." oninput="filterRecipes()">
+</div>
+
+<div id="admin-section">
+    <div id="admin-header">
+        <h3 id="form-title">Add New Recipe</h3>
+        <button class="btn btn-s" style="flex:none; padding:6px 12px;" onclick="handleLogout()">Log out</button>
+    </div>
+    <input type="hidden" id="editing-id">
+    <input type="text" id="rec-title" dir="auto" class="bidi-auto" placeholder="Recipe Title">
+    <input type="text" id="rec-cat" dir="auto" class="bidi-auto" placeholder="Category">
+    <input type="text" id="rec-img" placeholder="Image URL">
+    <textarea id="rec-desc" dir="auto" class="bidi-auto" placeholder="Description" rows="4"></textarea>
+    <button class="btn btn-p" onclick="handleSave()">Publish</button>
+    <button class="btn btn-s" onclick="resetForm()" style="margin-top:10px">Cancel</button>
+</div>
+
+<main class="container" id="recipe-grid">
+    <p id="status-msg">Loading recipes...</p>
+</main>
+
+<div id="login-trigger" onclick="adminLogin()">Admin Login</div>
+
+<script>
+    // ------------------------------------------------------------------
+    // STEP 1: Paste your Supabase project details here.
+    // Find these in your Supabase dashboard under Project Settings > API
+    // ------------------------------------------------------------------
+    const SB_URL = "https://nvpjvpkieebweenazswc.supabase.co";
+    const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52cGp2cGtpZWVid2VlbmF6c3djIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2NzU3MzcsImV4cCI6MjA5OTI1MTczN30._VzPx98g_Yeicl9JWGASScozs4_JiXFil5LriS6G_YU";
+
+    // IMPORTANT: the CDN script above creates a global object called
+    // `supabase`. We use it once here to build our own client, and we name
+    // our client `supabaseClient` (NOT `supabase`) so we don't overwrite
+    // the library object we just used.
+    const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
+
+    let allRecipes = [];
+    let currentUser = null;
+
+    // Escapes text before inserting into HTML, to prevent XSS from
+    // recipe titles/descriptions that might contain "<" or ">" characters.
+    function escapeHtml(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    async function loadRecipes() {
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        currentUser = user;
+        document.getElementById('admin-section').style.display = user ? 'block' : 'none';
+
+        const { data, error } = await supabaseClient.from('recipes').select('*').order('created_at', { ascending: false });
+        if (error) {
+            document.getElementById('recipe-grid').innerHTML = `<p id="status-msg">Couldn't load recipes. Please try again later.</p>`;
+            console.error(error);
+            return;
+        }
+        allRecipes = data;
+        displayRecipes(allRecipes);
+    }
+
+    function displayRecipes(recipesToDisplay) {
+        const grid = document.getElementById('recipe-grid');
+
+        if (recipesToDisplay.length === 0) {
+            grid.innerHTML = `<p id="status-msg">No recipes found with that name.</p>`;
+            return;
+        }
+
+        grid.innerHTML = recipesToDisplay.map(r => `
+            <div class="card">
+                <img src="${escapeHtml(r.image_url)}" alt="${escapeHtml(r.title)}" loading="lazy">
+                <div class="card-body">
+                    <small dir="auto" class="bidi-auto" style="color:var(--secondary)">${escapeHtml(r.category)}</small>
+                    <h3 dir="auto" class="bidi-auto">${escapeHtml(r.title)}</h3>
+                    <p dir="auto" class="bidi-auto">${escapeHtml(r.description)}</p>
+                </div>
+                ${currentUser ? `
+                <div class="admin-actions">
+                    <button class="btn btn-s" onclick="editRecipe('${r.id}')">Edit</button>
+                    <button class="btn btn-danger" onclick="deleteRecipe('${r.id}')">Delete</button>
+                </div>` : ''}
+                <div class="card-actions">
+                    <button class="btn btn-p" onclick="downloadImage('${r.image_url}', '${escapeHtml(r.title)}')">📥 Download</button>
+                    <button class="btn btn-s" onclick="shareRecipe('${r.id}')">🔗 Share</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function filterRecipes() {
+        const searchTerm = document.getElementById('search-input').value.toLowerCase();
+        const filtered = allRecipes.filter(recipe =>
+            (recipe.title || '').toLowerCase().includes(searchTerm)
+        );
+        displayRecipes(filtered);
+    }
+
+    // Downloads the image as a real file save, rather than just opening it
+    // in the browser (which is what a plain <a download> does for images
+    // hosted on another domain).
+    async function downloadImage(url, filenameHint) {
+        try {
+            const response = await fetch(url, { mode: 'cors' });
+            const blob = await response.blob();
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = (filenameHint || 'recipe').replace(/\s+/g, '_') + '.jpg';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(link.href);
+        } catch (e) {
+            // Fallback: just open the image in a new tab if fetch is blocked
+            window.open(url, '_blank');
+        }
+    }
+
+    // Uses the native share sheet on mobile (WhatsApp, Instagram, Messages,
+    // etc). Falls back to copying the link on desktop browsers that don't
+    // support the Web Share API.
+    async function shareRecipe(id) {
+        const r = allRecipes.find(item => item.id == id);
+        if (!r) return;
+        const shareData = {
+            title: r.title,
+            text: `Check out this recipe: ${r.title}`,
+            url: window.location.href
+        };
+        if (navigator.share) {
+            try { await navigator.share(shareData); } catch (e) { /* user cancelled */ }
+        } else {
+            try {
+                await navigator.clipboard.writeText(shareData.url);
+                alert('Link copied to clipboard!');
+            } catch (e) {
+                alert('Could not copy link.');
+            }
+        }
+    }
+
+    async function adminLogin() {
+        const email = prompt("Email:");
+        if (!email) return;
+        const password = prompt("Password:");
+        if (!password) return;
+        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) alert("Login failed: " + error.message);
+        else location.reload();
+    }
+
+    async function handleLogout() {
+        await supabaseClient.auth.signOut();
+        location.reload();
+    }
+
+    async function handleSave() {
+        const id = document.getElementById('editing-id').value;
+        const title = document.getElementById('rec-title').value.trim();
+        const imageUrl = document.getElementById('rec-img').value.trim();
+
+        if (!title || !imageUrl) {
+            alert('Please fill in at least a title and image URL.');
+            return;
+        }
+
+        const payload = {
+            title,
+            category: document.getElementById('rec-cat').value.trim(),
+            image_url: imageUrl,
+            description: document.getElementById('rec-desc').value.trim()
+        };
+
+        const { error } = id
+            ? await supabaseClient.from('recipes').update(payload).eq('id', id)
+            : await supabaseClient.from('recipes').insert([payload]);
+
+        if (error) {
+            alert('Something went wrong saving this recipe: ' + error.message);
+            return;
+        }
+        location.reload();
+    }
+
+    function editRecipe(id) {
+        const r = allRecipes.find(item => item.id == id);
+        if (!r) return;
+        document.getElementById('editing-id').value = r.id;
+        document.getElementById('rec-title').value = r.title;
+        document.getElementById('rec-cat').value = r.category;
+        document.getElementById('rec-img').value = r.image_url;
+        document.getElementById('rec-desc').value = r.description;
+        document.getElementById('form-title').textContent = 'Edit Recipe';
+        window.scrollTo(0, 0);
+    }
+
+    function resetForm() {
+        document.getElementById('editing-id').value = '';
+        document.getElementById('rec-title').value = '';
+        document.getElementById('rec-cat').value = '';
+        document.getElementById('rec-img').value = '';
+        document.getElementById('rec-desc').value = '';
+        document.getElementById('form-title').textContent = 'Add New Recipe';
+    }
+
+    async function deleteRecipe(id) {
+        if (!confirm("Delete this recipe? This can't be undone.")) return;
+        const { error } = await supabaseClient.from('recipes').delete().eq('id', id);
+        if (error) {
+            alert('Could not delete: ' + error.message);
+            return;
+        }
+        location.reload();
+    }
+
+    loadRecipes();
+</script>
+</body>
+</html>
