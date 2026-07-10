@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gawahir’s kitchen|Recipe Gallery</title>
+    <title>Gawahir&rsquo;s kitchen|Recipe Gallery</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,12 +14,23 @@
             --secondary: #606c38; --text-main: #2d2d2d; --shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
         body { font-family: 'Cairo', system-ui, sans-serif; background: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
-        header { text-align: center; padding: 40px 0 20px; }
+        header { text-align: center; padding: 40px 0 20px; position: relative; }
 
         /* Lets each piece of text render in its own natural direction
            (Arabic right-to-left, English left-to-right) regardless of
            what language the rest of the page is in. */
         .bidi-auto { unicode-bidi: plain-text; }
+
+        /* Language toggle button - uses logical inset so it stays in the
+           natural "far corner" whether the page is LTR or RTL. */
+        #lang-toggle {
+            position: fixed; top: 15px; inset-inline-end: 15px; z-index: 50;
+            background: var(--secondary); color: white; border: none;
+            padding: 8px 16px; border-radius: 20px; cursor: pointer;
+            font-weight: bold; font-size: 0.85rem; box-shadow: var(--shadow);
+            font-family: 'Cairo', system-ui, sans-serif;
+        }
+        #lang-toggle:hover { opacity: 0.9; }
 
         .search-container { max-width: 600px; margin: 0 auto 40px; position: relative; }
         #search-input {
@@ -44,15 +55,17 @@
         #admin-section { background: #fff; padding: 25px; border-radius: 12px; margin: 0 auto 40px; border: 2px solid var(--primary); display: none; max-width: 600px; }
         #admin-header { display: flex; justify-content: space-between; align-items: center; }
         input, textarea { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; display: block; box-sizing: border-box; }
-        #login-trigger { position: fixed; bottom: 10px; right: 10px; opacity: 0.3; cursor: pointer; font-size: 0.7rem; }
+        #login-trigger { position: fixed; bottom: 10px; inset-inline-end: 10px; opacity: 0.3; cursor: pointer; font-size: 0.7rem; }
         #status-msg { text-align: center; grid-column: 1/-1; color: #888; }
     </style>
 </head>
 <body>
 
+<button id="lang-toggle" onclick="toggleLanguage()">العربية</button>
+
 <header>
-    <h1>Gawahir’s Table</h1>
-    <p>Search through my recipes ❤️ (●'◡'●)</p>
+    <h1 id="page-title">Gawahir&rsquo;s Table</h1>
+    <p id="page-subtitle">Search through my recipes ❤️ (●'◡'●)</p>
 </header>
 
 <div class="search-container">
@@ -62,15 +75,15 @@
 <div id="admin-section">
     <div id="admin-header">
         <h3 id="form-title">Add New Recipe</h3>
-        <button class="btn btn-s" style="flex:none; padding:6px 12px;" onclick="handleLogout()">Log out</button>
+        <button class="btn btn-s" id="logout-btn" style="flex:none; padding:6px 12px;" onclick="handleLogout()">Log out</button>
     </div>
     <input type="hidden" id="editing-id">
     <input type="text" id="rec-title" dir="auto" class="bidi-auto" placeholder="Recipe Title">
     <input type="text" id="rec-cat" dir="auto" class="bidi-auto" placeholder="Category">
     <input type="text" id="rec-img" placeholder="Image URL">
     <textarea id="rec-desc" dir="auto" class="bidi-auto" placeholder="Description" rows="4"></textarea>
-    <button class="btn btn-p" onclick="handleSave()">Publish</button>
-    <button class="btn btn-s" onclick="resetForm()" style="margin-top:10px">Cancel</button>
+    <button class="btn btn-p" id="publish-btn" onclick="handleSave()">Publish</button>
+    <button class="btn btn-s" id="cancel-btn" onclick="resetForm()" style="margin-top:10px">Cancel</button>
 </div>
 
 <main class="container" id="recipe-grid">
@@ -81,8 +94,7 @@
 
 <script>
     // ------------------------------------------------------------------
-    // STEP 1: Paste your Supabase project details here.
-    // Find these in your Supabase dashboard under Project Settings > API
+    // Supabase project details
     // ------------------------------------------------------------------
     const SB_URL = "https://nvpjvpkieebweenazswc.supabase.co";
     const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52cGp2cGtpZWVid2VlbmF6c3djIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2NzU3MzcsImV4cCI6MjA5OTI1MTczN30._VzPx98g_Yeicl9JWGASScozs4_JiXFil5LriS6G_YU";
@@ -95,6 +107,113 @@
 
     let allRecipes = [];
     let currentUser = null;
+
+    // ------------------------------------------------------------------
+    // TRANSLATIONS — whole-page English / Arabic toggle
+    // ------------------------------------------------------------------
+    const translations = {
+        en: {
+            pageTitle: "Gawahir\u2019s Table",
+            subtitle: "Search through my recipes \u2764\uFE0F (\u25CF'\u25E1'\u25CF)",
+            searchPlaceholder: "\uD83D\uDD0D Search for a recipe title (e.g. Lemon Cake)...",
+            addTitle: "Add New Recipe",
+            editTitle: "Edit Recipe",
+            logout: "Log out",
+            titlePlaceholder: "Recipe Title",
+            categoryPlaceholder: "Category",
+            imageUrlPlaceholder: "Image URL",
+            descPlaceholder: "Description",
+            publish: "Publish",
+            cancel: "Cancel",
+            adminLoginTrigger: "Admin Login",
+            loading: "Loading recipes...",
+            loadError: "Couldn't load recipes. Please try again later.",
+            noResults: "No recipes found with that name.",
+            edit: "Edit",
+            delete: "Delete",
+            download: "\uD83D\uDCE5 Download",
+            share: "\uD83D\uDD17 Share",
+            shareTextPrefix: "Check out this recipe: ",
+            copied: "Link copied to clipboard!",
+            copyFailed: "Could not copy link.",
+            emailPrompt: "Email:",
+            passwordPrompt: "Password:",
+            loginFailed: "Login failed: ",
+            fillRequired: "Please fill in at least a title and image URL.",
+            saveError: "Something went wrong saving this recipe: ",
+            deleteConfirm: "Delete this recipe? This can't be undone.",
+            deleteError: "Could not delete: ",
+            toggleLabel: "\u0627\u0644\u0639\u0631\u0628\u064A\u0629"
+        },
+        ar: {
+            pageTitle: "\u0645\u0637\u0628\u062E \u062C\u0648\u0627\u0647\u0631",
+            subtitle: "\u0627\u0628\u062D\u062B\u064A \u0641\u064A \u0648\u0635\u0641\u0627\u062A\u064A \u2764\uFE0F (\u25CF'\u25E1'\u25CF)",
+            searchPlaceholder: "\uD83D\uDD0D \u0627\u0628\u062D\u062B \u0639\u0646 \u0627\u0633\u0645 \u0627\u0644\u0648\u0635\u0641\u0629 (\u0645\u062B\u0627\u0644: \u0643\u064A\u0643 \u0627\u0644\u0644\u064A\u0645\u0648\u0646)...",
+            addTitle: "\u0625\u0636\u0627\u0641\u0629 \u0648\u0635\u0641\u0629 \u062C\u062F\u064A\u062F\u0629",
+            editTitle: "\u062A\u0639\u062F\u064A\u0644 \u0627\u0644\u0648\u0635\u0641\u0629",
+            logout: "\u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062E\u0631\u0648\u062C",
+            titlePlaceholder: "\u0627\u0633\u0645 \u0627\u0644\u0648\u0635\u0641\u0629",
+            categoryPlaceholder: "\u0627\u0644\u062A\u0635\u0646\u064A\u0641",
+            imageUrlPlaceholder: "\u0631\u0627\u0628\u0637 \u0627\u0644\u0635\u0648\u0631\u0629",
+            descPlaceholder: "\u0627\u0644\u0648\u0635\u0641",
+            publish: "\u0646\u0634\u0631",
+            cancel: "\u0625\u0644\u063A\u0627\u0621",
+            adminLoginTrigger: "\u062F\u062E\u0648\u0644 \u0627\u0644\u0645\u0634\u0631\u0641",
+            loading: "\u062C\u0627\u0631\u064D \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0648\u0635\u0641\u0627\u062A...",
+            loadError: "\u062A\u0639\u0630\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0648\u0635\u0641\u0627\u062A. \u062D\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062E\u0631\u0649 \u0644\u0627\u062D\u0642\u0627\u064B.",
+            noResults: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0648\u0635\u0641\u0627\u062A \u0628\u0647\u0630\u0627 \u0627\u0644\u0627\u0633\u0645.",
+            edit: "\u062A\u0639\u062F\u064A\u0644",
+            delete: "\u062D\u0630\u0641",
+            download: "\uD83D\uDCE5 \u062A\u062D\u0645\u064A\u0644",
+            share: "\uD83D\uDD17 \u0645\u0634\u0627\u0631\u0643\u0629",
+            shareTextPrefix: "\u062A\u062D\u0642\u0642 \u0645\u0646 \u0647\u0630\u0647 \u0627\u0644\u0648\u0635\u0641\u0629: ",
+            copied: "\u062A\u0645 \u0646\u0633\u062E \u0627\u0644\u0631\u0627\u0628\u0637!",
+            copyFailed: "\u062A\u0639\u0630\u0631 \u0646\u0633\u062E \u0627\u0644\u0631\u0627\u0628\u0637.",
+            emailPrompt: "\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A:",
+            passwordPrompt: "\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631:",
+            loginFailed: "\u0641\u0634\u0644 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644: ",
+            fillRequired: "\u064A\u0631\u062C\u0649 \u0625\u062F\u062E\u0627\u0644 \u0627\u0633\u0645 \u0627\u0644\u0648\u0635\u0641\u0629 \u0648\u0631\u0627\u0628\u0637 \u0627\u0644\u0635\u0648\u0631\u0629 \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644.",
+            saveError: "\u062D\u062F\u062B \u062E\u0637\u0623 \u0623\u062B\u0646\u0627\u0621 \u062D\u0641\u0638 \u0627\u0644\u0648\u0635\u0641\u0629: ",
+            deleteConfirm: "\u0647\u0644 \u062A\u0631\u064A\u062F\u064A \u062D\u0630\u0641 \u0647\u0630\u0647 \u0627\u0644\u0648\u0635\u0641\u0629\u061F \u0644\u0627 \u064A\u0645\u0643\u0646 \u0627\u0644\u062A\u0631\u0627\u062C\u0639 \u0639\u0646 \u0647\u0630\u0627 \u0627\u0644\u0625\u062C\u0631\u0627\u0621.",
+            deleteError: "\u062A\u0639\u0630\u0631 \u0627\u0644\u062D\u0630\u0641: ",
+            toggleLabel: "English"
+        }
+    };
+
+    let currentLang = localStorage.getItem('siteLang') || 'en';
+
+    function t(key) {
+        return translations[currentLang][key];
+    }
+
+    function applyStaticTranslations() {
+        document.documentElement.lang = currentLang;
+        document.documentElement.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+
+        document.getElementById('lang-toggle').textContent = t('toggleLabel');
+        document.getElementById('page-title').textContent = t('pageTitle');
+        document.getElementById('page-subtitle').textContent = t('subtitle');
+        document.getElementById('search-input').placeholder = t('searchPlaceholder');
+
+        const isEditing = !!document.getElementById('editing-id').value;
+        document.getElementById('form-title').textContent = isEditing ? t('editTitle') : t('addTitle');
+        document.getElementById('logout-btn').textContent = t('logout');
+        document.getElementById('rec-title').placeholder = t('titlePlaceholder');
+        document.getElementById('rec-cat').placeholder = t('categoryPlaceholder');
+        document.getElementById('rec-img').placeholder = t('imageUrlPlaceholder');
+        document.getElementById('rec-desc').placeholder = t('descPlaceholder');
+        document.getElementById('publish-btn').textContent = t('publish');
+        document.getElementById('cancel-btn').textContent = t('cancel');
+        document.getElementById('login-trigger').textContent = t('adminLoginTrigger');
+    }
+
+    function toggleLanguage() {
+        currentLang = currentLang === 'en' ? 'ar' : 'en';
+        localStorage.setItem('siteLang', currentLang);
+        applyStaticTranslations();
+        // Re-render dynamic content (card buttons, status messages) in the new language
+        filterRecipes();
+    }
 
     // Escapes text before inserting into HTML, to prevent XSS from
     // recipe titles/descriptions that might contain "<" or ">" characters.
@@ -112,7 +231,7 @@
 
         const { data, error } = await supabaseClient.from('recipes').select('*').order('created_at', { ascending: false });
         if (error) {
-            document.getElementById('recipe-grid').innerHTML = `<p id="status-msg">Couldn't load recipes. Please try again later.</p>`;
+            document.getElementById('recipe-grid').innerHTML = `<p id="status-msg">${t('loadError')}</p>`;
             console.error(error);
             return;
         }
@@ -124,7 +243,7 @@
         const grid = document.getElementById('recipe-grid');
 
         if (recipesToDisplay.length === 0) {
-            grid.innerHTML = `<p id="status-msg">No recipes found with that name.</p>`;
+            grid.innerHTML = `<p id="status-msg">${t('noResults')}</p>`;
             return;
         }
 
@@ -138,12 +257,12 @@
                 </div>
                 ${currentUser ? `
                 <div class="admin-actions">
-                    <button class="btn btn-s" onclick="editRecipe('${r.id}')">Edit</button>
-                    <button class="btn btn-danger" onclick="deleteRecipe('${r.id}')">Delete</button>
+                    <button class="btn btn-s" onclick="editRecipe('${r.id}')">${t('edit')}</button>
+                    <button class="btn btn-danger" onclick="deleteRecipe('${r.id}')">${t('delete')}</button>
                 </div>` : ''}
                 <div class="card-actions">
-                    <button class="btn btn-p" onclick="downloadImage('${r.image_url}', '${escapeHtml(r.title)}')">📥 Download</button>
-                    <button class="btn btn-s" onclick="shareRecipe('${r.id}')">🔗 Share</button>
+                    <button class="btn btn-p" onclick="downloadImage('${r.image_url}', '${escapeHtml(r.title)}')">${t('download')}</button>
+                    <button class="btn btn-s" onclick="shareRecipe('${r.id}')">${t('share')}</button>
                 </div>
             </div>
         `).join('');
@@ -185,7 +304,7 @@
         if (!r) return;
         const shareData = {
             title: r.title,
-            text: `Check out this recipe: ${r.title}`,
+            text: t('shareTextPrefix') + r.title,
             url: window.location.href
         };
         if (navigator.share) {
@@ -193,20 +312,20 @@
         } else {
             try {
                 await navigator.clipboard.writeText(shareData.url);
-                alert('Link copied to clipboard!');
+                alert(t('copied'));
             } catch (e) {
-                alert('Could not copy link.');
+                alert(t('copyFailed'));
             }
         }
     }
 
     async function adminLogin() {
-        const email = prompt("Email:");
+        const email = prompt(t('emailPrompt'));
         if (!email) return;
-        const password = prompt("Password:");
+        const password = prompt(t('passwordPrompt'));
         if (!password) return;
         const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) alert("Login failed: " + error.message);
+        if (error) alert(t('loginFailed') + error.message);
         else location.reload();
     }
 
@@ -221,7 +340,7 @@
         const imageUrl = document.getElementById('rec-img').value.trim();
 
         if (!title || !imageUrl) {
-            alert('Please fill in at least a title and image URL.');
+            alert(t('fillRequired'));
             return;
         }
 
@@ -237,7 +356,7 @@
             : await supabaseClient.from('recipes').insert([payload]);
 
         if (error) {
-            alert('Something went wrong saving this recipe: ' + error.message);
+            alert(t('saveError') + error.message);
             return;
         }
         location.reload();
@@ -251,7 +370,7 @@
         document.getElementById('rec-cat').value = r.category;
         document.getElementById('rec-img').value = r.image_url;
         document.getElementById('rec-desc').value = r.description;
-        document.getElementById('form-title').textContent = 'Edit Recipe';
+        document.getElementById('form-title').textContent = t('editTitle');
         window.scrollTo(0, 0);
     }
 
@@ -261,19 +380,20 @@
         document.getElementById('rec-cat').value = '';
         document.getElementById('rec-img').value = '';
         document.getElementById('rec-desc').value = '';
-        document.getElementById('form-title').textContent = 'Add New Recipe';
+        document.getElementById('form-title').textContent = t('addTitle');
     }
 
     async function deleteRecipe(id) {
-        if (!confirm("Delete this recipe? This can't be undone.")) return;
+        if (!confirm(t('deleteConfirm'))) return;
         const { error } = await supabaseClient.from('recipes').delete().eq('id', id);
         if (error) {
-            alert('Could not delete: ' + error.message);
+            alert(t('deleteError') + error.message);
             return;
         }
         location.reload();
     }
 
+    applyStaticTranslations();
     loadRecipes();
 </script>
 </body>
