@@ -8,19 +8,29 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
         :root {
             --bg-color: #fdfaf6; --card-bg: #ffffff; --primary: #8d5524;
             --secondary: #606c38; --text-main: #2d2d2d; --shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
-        body { font-family: 'Cairo', system-ui, sans-serif; background: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
+        body { font-family: 'Cairo', system-ui, sans-serif; background: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; padding-bottom: 80px; }
         header { text-align: center; padding: 40px 0 20px; position: relative; }
 
-        .search-container { max-width: 600px; margin: 0 auto 40px; position: relative; }
+        .search-container { 
+            max-width: 600px; 
+            margin: 0 auto 40px; 
+            position: sticky; 
+            top: 20px; 
+            z-index: 1000; 
+        }
+        
         #search-input {
             width: 100%; padding: 15px 20px; border-radius: 30px; border: 2px solid #ddd;
             font-size: 1rem; outline: none; transition: border-color 0.3s;
-            box-shadow: var(--shadow); box-sizing: border-box; font-family: 'Cairo', sans-serif;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; font-family: 'Cairo', sans-serif;
+            background: white;
         }
         #search-input:focus { border-color: var(--secondary); }
 
@@ -29,7 +39,6 @@
         .card img { width: 100%; height: 200px; object-fit: cover; background: #f0f0f0; }
         .card-body { padding: 20px; flex-grow: 1; }
         
-        /* ميزة الحفاظ على تنسيق الأسطر والفقرات ومنع تداخل النص */
         .recipe-desc { 
             white-space: pre-wrap; 
             word-break: break-word; 
@@ -38,10 +47,10 @@
             line-height: 1.6;
         }
 
-        .card-actions { padding: 15px; display: flex; gap: 8px; border-top: 1px solid #eee; }
+        .card-actions { padding: 15px; display: flex; gap: 8px; border-top: 1px solid #eee; flex-wrap: wrap; }
         .admin-actions { padding: 0 15px 15px; display: flex; gap: 8px; }
 
-        .btn { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.8rem; text-align: center; text-decoration: none; color: inherit; font-family: 'Cairo', sans-serif; }
+        .btn { flex: 1; min-width: 80px; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.8rem; text-align: center; text-decoration: none; color: inherit; font-family: 'Cairo', sans-serif; }
         .btn-p { background: var(--secondary); color: white; }
         .btn-s { background: #eee; color: #333; }
         .btn-danger { background: #f4d6d6; color: #a33; }
@@ -49,8 +58,74 @@
         #admin-section { background: #fff; padding: 25px; border-radius: 12px; margin: 0 auto 40px; border: 2px solid var(--primary); display: none; max-width: 600px; }
         #admin-header { display: flex; justify-content: space-between; align-items: center; }
         input, textarea { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; display: block; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-        #login-trigger { position: fixed; bottom: 10px; inset-inline-end: 10px; opacity: 0.3; cursor: pointer; font-size: 0.7rem; }
+        #login-trigger { position: fixed; bottom: 10px; inset-inline-end: 10px; opacity: 0.3; cursor: pointer; font-size: 0.7rem; z-index: 999; }
         #status-msg { text-align: center; grid-column: 1/-1; color: #888; }
+
+        /* تنسيقات شريط التواصل الاجتماعي الثابت */
+        .social-footer {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 998;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px 20px;
+            border-radius: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            backdrop-filter: blur(5px);
+        }
+        .social-icon {
+            color: white;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            font-size: 1.4rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .social-icon:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+        }
+        .fb-icon { background: #1877F2; }
+        .wa-icon { background: #25D366; }
+        .ig-icon { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%); }
+
+        /* تنسيقات إشعار النسخ (Toast) */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: var(--secondary);
+            color: #fff;
+            text-align: center;
+            border-radius: 30px;
+            padding: 12px 20px;
+            position: fixed;
+            z-index: 1001;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-size: 1rem;
+            opacity: 0;
+            transition: opacity 0.3s, bottom 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 90px; /* لضمان ظهوره فوق أيقونات التواصل */
+        }
+
+        @media (max-width: 600px) {
+            .social-footer { padding: 8px 15px; gap: 10px; }
+            .social-icon { width: 40px; height: 40px; font-size: 1.2rem; }
+            .btn { font-size: 0.75rem; padding: 8px; }
+        }
     </style>
 </head>
 <body>
@@ -83,6 +158,22 @@
 </main>
 
 <div id="login-trigger" onclick="adminLogin()">دخول المشرف</div>
+
+<!-- شريط التواصل الاجتماعي الثابت -->
+<div class="social-footer">
+    <a href="https://www.facebook.com/share/1EPT4LDPor/" target="_blank" class="social-icon fb-icon" aria-label="فيسبوك">
+        <i class="fab fa-facebook-f"></i>
+    </a>
+    <a href="https://whatsapp.com/channel/0029Vb6gK4r8KMqgSwswPS3V" target="_blank" class="social-icon wa-icon" aria-label="واتساب">
+        <i class="fab fa-whatsapp"></i>
+    </a>
+    <a href="https://www.instagram.com/jee_1017" target="_blank" class="social-icon ig-icon" aria-label="إنستجرام">
+        <i class="fab fa-instagram"></i>
+    </a>
+</div>
+
+<!-- عنصر الإشعار (Toast) -->
+<div id="toast">تم نسخ الوصفة بنجاح! ✅</div>
 
 <script>
     const SB_URL = "https://nvpjvpkieebweenazswc.supabase.co";
@@ -136,6 +227,7 @@
                     <button class="btn btn-danger" onclick="deleteRecipe('${r.id}')">حذف</button>
                 </div>` : ''}
                 <div class="card-actions">
+                    <button class="btn btn-s" onclick="copyRecipe('${r.id}')">📋 نسخ</button>
                     <button class="btn btn-p" onclick="downloadImage('${r.image_url}', '${escapeHtml(r.title)}')">📥 تحميل</button>
                     <button class="btn btn-s" onclick="shareRecipe('${r.id}')">🔗 مشاركة</button>
                 </div>
@@ -149,6 +241,23 @@
             (recipe.title || '').toLowerCase().includes(searchTerm)
         );
         displayRecipes(filtered);
+    }
+
+    // دالة نسخ الوصفة
+    async function copyRecipe(id) {
+        const r = allRecipes.find(item => item.id == id);
+        if (!r) return;
+        
+        const textToCopy = `${r.title}\n\nالمقادير وطريقة التحضير:\n${r.description}`;
+        
+        try {
+            await navigator.clipboard.writeText(textToCopy);
+            const toast = document.getElementById("toast");
+            toast.className = "show";
+            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+        } catch (e) {
+            alert("تعذر نسخ الوصفة، يرجى المحاولة مرة أخرى.");
+        }
     }
 
     async function downloadImage(url, filenameHint) {
